@@ -6,11 +6,6 @@ import os
 import json
 from selectolax.parser import HTMLParser
 
-# MORE GENERAL
-# https://scrapfly.io/blog/how-to-turn-web-scrapers-into-data-apis/
-# https://www.vlr.gg/vct
-# https://fastapi.tiangolo.com/deployment/deta/
-
 
 class VLR_Scraper():
     def __init__(self) -> None:
@@ -23,24 +18,6 @@ class VLR_Scraper():
         return HTMLParser(html), status_code
 
     # input from this type of page https://www.vlr.gg/events/
-    # event_type options are "completed" or "upcoming"
-
-    # codes are
-    """
-    all
-    north-america
-    europe
-    brazil
-    asia-pacific
-    korea
-    japan
-    latin-america
-    oceania
-    mena
-    game-changers
-    collegiate
-    """
-
     def get_event_urls(self, code, event_type="completed"):
         url = "https://www.vlr.gg/events/" + code
         html, status = self.get_html(url)
@@ -53,11 +30,10 @@ class VLR_Scraper():
             "href") for i in container.css("a.wf-card.mod-flex.event-item")]
 
         segments = {"status": status, "urls": event_urls}
-        data = {"data": segments}
 
         if status != 200:
             raise Exception(f"Response Code: {status}")
-        return data
+        return segments
 
     # input is an event url
     def get_match_urls(self, code):
@@ -74,13 +50,12 @@ class VLR_Scraper():
                 set(["https://www.vlr.gg" + link for link in a_href if filt.match(link)]))
 
         segments = {"status": status, "urls": match_urls}
-        data = {"data": segments}
 
         if status != 200:
             raise Exception(f"Response Code: {status}")
-        return data
+        return segments
 
-    def get_match_stats_header(self, code):
+    def get_match_stats_score(self, code):
         url = "https://www.vlr.gg/" + code
         html, status = self.get_html(url)
         match_stats = []
@@ -146,11 +121,10 @@ class VLR_Scraper():
             }
             match_stats.append(map_stats)
         segments = {"status": status, "segments": match_stats}
-        data = {"data": segments}
 
         if status != 200:
             raise Exception(f"Response Code: {status}")
-        return data
+        return segments
 
     def round_order_helper(self, node):
         if node.css_first("div.rnd-num") == None:
@@ -177,7 +151,7 @@ class VLR_Scraper():
             tup_list = []
             header_data = game.css_first("div.vm-stats-game-header")
 
-            tup_list.append(("link", self.url))
+            tup_list.append(("url", self.url))
 
             # Map Name
             map_name = (header_data.css_first("div.map")
@@ -195,11 +169,10 @@ class VLR_Scraper():
             match_stats.append(dict(tup_list))
 
         segments = {"status": status, "segments": match_stats}
-        data = {"data": segments}
 
         if status != 200:
             raise Exception(f"Response Code: {status}")
-        return data
+        return segments
 
     # side options are "both", "t", "ct"
     def get_match_stats_players(self, code, side="both"):
@@ -219,12 +192,27 @@ class VLR_Scraper():
                         .css_first("span")
                         .text().replace("PICK", "").strip())
 
+            # Winning Team
+            winner = (header_data.css_first("div.score.mod-win")
+                      .parent
+                      .css_first("div.team-name")
+                      .text().strip())
+
             # Team Names
             team_data = header_data.css("div.team")
             team1 = (team_data[0].css_first("div.team-name")
                      .text().strip())
             team2 = (team_data[1].css_first("div.team-name")
                      .text().strip())
+
+            # Team Side Scores
+            team1_ct_score = team_data[0].css_first(
+                "span.mod-ct").text()
+            team2_ct_score = team_data[1].css_first(
+                "span.mod-ct").text()
+
+            team1_t_score = team_data[0].css_first("span.mod-t").text()
+            team2_t_score = team_data[1].css_first("span.mod-t").text()
 
             # Starting Sides
             team1_starting_side = (team_data[0].css_first("span")
@@ -241,8 +229,13 @@ class VLR_Scraper():
             map_stats = {
                 "url": self.url,
                 "map": map_name,
+                "winner": winner,
                 "team1": team1,
                 "team2": team2,
+                "team1_ct_score": int(team1_ct_score),
+                "team2_ct_score": int(team2_ct_score),
+                "team1_t_score": int(team1_t_score),
+                "team2_t_score": int(team2_t_score),
                 "team1_starting_side": team1_starting_side,
                 "team2_starting_side": team2_starting_side,
             }
@@ -253,7 +246,7 @@ class VLR_Scraper():
             thead = tables[0].css_first("thead")
             th = [i.attributes.get("title") for i in thead.css("th")]
             th[0] = "Player"
-            th[-1] = "First Kills - Deaths"
+            th[-1] = "First Kills - First Deaths"
 
             # Two tables per match page
             for team_num, v in enumerate(tables):
@@ -289,22 +282,13 @@ class VLR_Scraper():
             match_stats.append(map_stats)
 
         segments = {"status": status, "segments": match_stats}
-        data = {"data": segments}
 
         if status != 200:
             raise Exception(f"Response Code: {status}")
-        return data
+        return segments
 
     def save_json(self, json_data, name):
         json_object = json.dumps(json_data, indent=4)
         cwd = os.getcwd()
         with open(f"{cwd}\\data\\{name}.json", "w") as outfile:
             outfile.write(json_object)
-
-
-if __name__ == "__main__":
-    vlr = VLR_Scraper()
-    url = "https://www.vlr.gg/event/1015/valorant-champions-2022"
-
-    df = vlr.get_match_urls(url)
-    vlr.save_json(df, "out")
