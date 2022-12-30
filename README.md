@@ -1,4 +1,4 @@
-# vlr_gg_api
+# VLR.gg API
 WIP Unofficial REST API for vlr.gg
 
 ### For endpoints
